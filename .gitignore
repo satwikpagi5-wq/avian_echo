@@ -1,0 +1,18 @@
+# Python environment and cache
+venv/
+.venv/
+__pycache__/
+
+# Environment variables (keeps your API keys safe if you add them later)
+.env
+
+# Model weights and binaries - NEVER push these to GitHub
+*.tflite
+*.gguf
+*.onnx
+*.bin
+models/
+
+# Audio files
+*.wav
+*.mp3
