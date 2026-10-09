@@ -3,6 +3,7 @@ import time
 import numpy as np
 import librosa
 import os
+import requests
 from audio_capture import start_listening, audio_queue
 from bird_classifier import identify_bird
 from brain_llm import generate_lore
@@ -24,45 +25,64 @@ def get_audio_stream():
 
 stream = get_audio_stream()
 
+def get_real_bird_image_url(bird_name):
+    """Fetches a real photograph of the exact bird species from Wikipedia."""
+    formatted_name = bird_name.replace(" ", "_")
+    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{formatted_name}"
+    
+    try:
+        # Wikipedia requires a User-Agent header for API requests
+        response = requests.get(url, headers={"User-Agent": "AvianEchoApp/1.0"})
+        if response.status_code == 200:
+            data = response.json()
+            # Try to get the high-res original image first, fallback to thumbnail
+            if "originalimage" in data and "source" in data["originalimage"]:
+                return data["originalimage"]["source"]
+            elif "thumbnail" in data and "source" in data["thumbnail"]:
+                return data["thumbnail"]["source"]
+    except Exception:
+        pass
+        
+    # Fallback placeholder if Wikipedia lacks an image for this specific bird
+    return "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/300px-No_image_available.svg.png"
+
 # Create UI Tabs for different modes
 tab1, tab2 = st.tabs(["📁 Upload Audio", "🎙️ Live Microphone"])
 
 with tab1:
     st.write("Upload a pre-recorded bird sound to analyze it.")
-    # File uploader widget
     uploaded_file = st.file_uploader("Choose an audio file", type=['wav', 'mp3'])
     
     if uploaded_file is not None:
-        # Option to run/play the audio
         st.audio(uploaded_file)
         
-        # Option to analyze and give text
         if st.button("🔍 Identify Bird"):
             with st.spinner("Analyzing audio..."):
-                # Save the uploaded file temporarily so librosa can read it
                 with open("temp_upload.wav", "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 
-                # Load, convert to mono, and resample to exactly 48kHz
                 audio_data, _ = librosa.load("temp_upload.wav", sr=48000, mono=True)
                 
-                # The ONNX model requires exactly 144,000 samples (3 seconds)
                 if len(audio_data) > 144000:
                     start = (len(audio_data) - 144000) // 2
                     audio_data = audio_data[start:start+144000]
                 elif len(audio_data) < 144000:
                     audio_data = np.pad(audio_data, (0, 144000 - len(audio_data)))
                     
-                # Predict
                 species, confidence = identify_bird(audio_data)
                 
                 if species:
                     st.success(f"**Detected: {species}** (Confidence: {confidence:.2f})")
+                    
+                    # 📸 Fetch and display the real Wikipedia image
+                    image_url = get_real_bird_image_url(species)
+                    st.image(image_url, caption=f"Photograph of {species} (via Wikipedia)", use_container_width=True)
+                    
                     lore = generate_lore(species)
                     st.write(f"📖 *{lore}*")
                     speak(lore) 
                     
-                    st.session_state.history.insert(0, {"bird": species, "conf": confidence, "lore": lore})
+                    st.session_state.history.insert(0, {"bird": species, "conf": confidence, "lore": lore, "img": image_url})
                 else:
                     st.error("No confident bird matches found in this audio file.")
 
@@ -80,11 +100,16 @@ with tab2:
             
             if species:
                 st.success(f"**Live Detection: {species}** (Confidence: {confidence:.2f})")
+                
+                # 📸 Fetch and display the real Wikipedia image
+                image_url = get_real_bird_image_url(species)
+                st.image(image_url, caption=f"Photograph of {species} (via Wikipedia)", use_container_width=True)
+                
                 lore = generate_lore(species)
                 st.write(f"📖 *{lore}*")
                 speak(lore)
                 
-                st.session_state.history.insert(0, {"bird": species, "conf": confidence, "lore": lore})
+                st.session_state.history.insert(0, {"bird": species, "conf": confidence, "lore": lore, "img": image_url})
                 
                 with audio_queue.mutex:
                     audio_queue.queue.clear()
