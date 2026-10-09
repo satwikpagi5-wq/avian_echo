@@ -16,3 +16,11 @@ models/
 # Audio files
 *.wav
 *.mp3
+
+# Piper TTS Engine and Configs
+piper/
+piper.zip
+*.onnx.json
+
+# BirdNET Labels
+labels.txt
